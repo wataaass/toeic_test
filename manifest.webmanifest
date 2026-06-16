@@ -1,0 +1,18 @@
+{
+  "name": "TOEIC Vocab Steps",
+  "short_name": "Vocab Steps",
+  "description": "TOEICスコア別の英単語学習アプリ",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f8ff",
+  "theme_color": "#1f6feb",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
