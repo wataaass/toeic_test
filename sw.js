@@ -1,4 +1,4 @@
-const CACHE = "toeic-vocab-steps-v9";
+const CACHE = "toeic-vocab-steps-v11";
 const ASSETS = ["./", "./index.html", "./styles.css", "./vocab-data.js", "./app.js", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (event) => {

@@ -274,6 +274,47 @@ function getSourceWords(source = state.settings.source, level = state.settings.l
   return getLevelGroupWords(level, group);
 }
 
+function isUnanswered(word) {
+  return !state.progress[word.id]?.attempts;
+}
+
+function needsPractice(word) {
+  return state.mistakes.includes(word.id) || !isMastered(word.id);
+}
+
+function prioritizeQuizPool(pool) {
+  const unanswered = [];
+  const practice = [];
+  const mastered = [];
+  pool.forEach((word) => {
+    if (isUnanswered(word)) unanswered.push(word);
+    else if (needsPractice(word)) practice.push(word);
+    else mastered.push(word);
+  });
+  return [...shuffle(unanswered), ...shuffle(practice), ...shuffle(mastered)];
+}
+
+function isPhraseItem(word) {
+  return word.pos?.includes("熟語") || word.source === "TOEIC phrase" || word.id?.includes("-phrase");
+}
+
+function getDistractorCandidates(word, pool, source) {
+  const sourceDistractors = source === "level" ? pool : WORDS.filter((item) => item.level === word.level);
+  if (!isPhraseItem(word)) return sourceDistractors;
+  const sameSourcePhrases = sourceDistractors.filter((item) => isPhraseItem(item));
+  if (sameSourcePhrases.length >= 4) return sameSourcePhrases;
+  const sameLevelPhrases = WORDS.filter((item) => item.level === word.level && isPhraseItem(item));
+  if (sameLevelPhrases.length >= 4) return sameLevelPhrases;
+  return WORDS.filter((item) => isPhraseItem(item));
+}
+
+function makeQuizQuestion(word, pool, source) {
+  const sourceDistractors = getDistractorCandidates(word, pool, source);
+  const sameLevel = sourceDistractors.filter((item) => item.id !== word.id && item.meaning !== word.meaning);
+  const distractors = shuffle(sameLevel).slice(0, 3);
+  return { word, options: shuffle([word, ...distractors]), selectedId: null, choicesHidden: true };
+}
+
 function getSourceLabel(source = state.settings.source, level = state.settings.level, group = state.settings.group) {
   if (source === "mistakes") return "間違えた単語";
   if (source === "checked") return "チェックした単語";
@@ -388,7 +429,7 @@ function renderSetup(level = state.settings.level) {
         <div>
           <h3>問題数</h3>
           <div class="choice-chips">
-            ${[5, 10, 15].map((count) => `<button class="choice-chip ${count === state.settings.count ? "active" : ""}" type="button" data-set-count="${count}">${count}問</button>`).join("")}
+            ${[5, 10, 15, 30, 50, 100].map((count) => `<button class="choice-chip ${count === state.settings.count ? "active" : ""}" type="button" data-set-count="${count}">${count}問</button>`).join("")}
           </div>
         </div>
         <div class="setup-row">
@@ -410,20 +451,18 @@ function startQuiz(level = state.settings.level, count = state.settings.count, s
     showToast(source === "mistakes" ? "間違えた単語はまだありません" : source === "checked" ? "チェックした単語はまだありません" : "出題できる単語がありません");
     return;
   }
-  const selected = shuffle(pool).slice(0, Math.min(Number(count), pool.length));
+  const selected = prioritizeQuizPool(pool).slice(0, Math.min(Number(count), pool.length));
+  const label = getSourceLabel(source, level, group);
   quiz = {
     level: Number(level),
     group: Number(group),
     source,
-    label: getSourceLabel(source, level, group),
+    label,
+    baseLabel: label,
+    retryPhase: false,
     index: 0,
     score: 0,
-    questions: selected.map((word) => {
-      const sourceDistractors = source === "level" ? pool : WORDS.filter((item) => item.level === word.level);
-      const sameLevel = sourceDistractors.filter((item) => item.id !== word.id && item.meaning !== word.meaning);
-      const distractors = shuffle(sameLevel).slice(0, 3);
-      return { word, options: shuffle([word, ...distractors]), selectedId: null, choicesHidden: true };
-    })
+    questions: selected.map((word) => makeQuizQuestion(word, pool, source))
   };
   state.lastLevel = Number(level);
   state.settings.source = source;
@@ -490,13 +529,36 @@ function answerQuestion(selectedId) {
   if (correct) record.correct += 1;
   if (!correct && !state.mistakes.includes(question.word.id)) state.mistakes.push(question.word.id);
   state.progress[question.word.id] = record;
+  if (correct && isMastered(question.word.id)) {
+    state.mistakes = state.mistakes.filter((wordId) => wordId !== question.word.id);
+  }
   saveState();
   renderQuiz();
 }
 
+function startRetryPhase() {
+  if (!quiz || quiz.retryPhase) return false;
+  const missedWords = quiz.questions
+    .filter((question) => question.selectedId !== question.word.id)
+    .map((question) => question.word);
+  if (!missedWords.length) return false;
+  const retryPool = getSourceWords(quiz.source, quiz.level, quiz.group);
+  quiz.retryPhase = true;
+  quiz.label = `${quiz.baseLabel || quiz.label}・復習`;
+  quiz.index = 0;
+  quiz.score = 0;
+  quiz.questions = missedWords.map((word) => makeQuizQuestion(word, retryPool, quiz.source));
+  showToast("間違えた問題をもう一度解きます");
+  renderQuiz();
+  return true;
+}
+
 function nextQuestion() {
   if (!quiz) return;
-  if (quiz.index >= quiz.questions.length - 1) return renderResult();
+  if (quiz.index >= quiz.questions.length - 1) {
+    if (startRetryPhase()) return;
+    return renderResult();
+  }
   quiz.index += 1;
   renderQuiz();
 }
