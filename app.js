@@ -501,7 +501,10 @@ function renderQuiz() {
           let className = "answer-button";
           if (answered && option.id === question.word.id) className += " correct";
           if (answered && option.id === question.selectedId && option.id !== question.word.id) className += " wrong";
-          return `<button class="${className}" type="button" data-answer="${option.id}" ${answered ? "disabled" : ""}><span>${String.fromCharCode(65 + index)}.</span> <span style="${hideChoiceText ? "visibility:hidden" : ""}">${escapeHtml(option.meaning)}</span></button>`;
+          const hiddenAttrs = hideChoiceText ? 'disabled tabindex="-1" aria-hidden="true" style="pointer-events:none"' : "";
+          const disabledAttr = answered && !hideChoiceText ? "disabled" : "";
+          const hiddenStyle = hideChoiceText ? "visibility:hidden" : "";
+          return `<button class="${className}" type="button" data-answer="${option.id}" ${hiddenAttrs || disabledAttr}><span style="${hiddenStyle}">${String.fromCharCode(65 + index)}.</span> <span style="${hiddenStyle}">${escapeHtml(option.meaning)}</span></button>`;
         }).join("")}
       </div>
       ${answered ? `
